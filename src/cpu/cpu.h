@@ -2,9 +2,15 @@
 #define CPU_H
 
 #include "stdint.h"
+#include <windows.h> // Multiplatform support -> unistd.h
 
-#define NOP 0x00
-#define JP 0xC3
+#include "opcode.h"
+
+
+#define FLAG_Z 0x80  // Zero flag
+#define FLAG_N 0x40  // Subtraction flag
+#define FLAG_H 0x20  // Half Carry flag
+#define FLAG_C 0x10  // Carry flag
 
 typedef struct {
     uint8_t AF[2]; // High-Low register pairs
@@ -16,8 +22,5 @@ typedef struct {
     uint16_t PC;
 } CPU_registers;
 
-void initialize_CPU(CPU_registers*, uint8_t*);
-uint8_t fetch_next_byte(CPU_registers*, uint8_t*);
-void decode_execute_opcode(CPU_registers*, uint8_t, uint8_t*);
 
 #endif

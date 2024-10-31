@@ -15,13 +15,325 @@ uint8_t fetch_next_byte(CPU_registers* cpu, uint8_t* memory)
 };
 
 void decode_execute_opcode(CPU_registers* cpu, uint8_t opcode, uint8_t* memory) {
+    // For opcodes with no operand
     switch (opcode) {
-        case JP:
+        case NOP:
+            break;
+        case LD_IMM16_SP: {
+            uint16_t imm16 = fetch_next_byte(cpu, memory);
+            imm16 |= fetch_next_byte(cpu, memory) << 8;
+            cpu->SP = imm16;
+            break;
+        }
+        case RLCA: {
+            uint8_t carry_out = (cpu->AF[0] & 0x80) ? 1 : 0;
+
+            cpu->AF[0] = (cpu->AF[0] << 1) | carry_out;
+
+            if (carry_out) {
+                cpu->AF[1] |= FLAG_C;  
+            } else {
+                cpu->AF[1] &= ~FLAG_C; 
+            }
+
+            cpu->AF[1] &= ~(FLAG_Z | FLAG_N | FLAG_H);
+            break;
+        }
+        case RRCA: {
+            uint8_t carry_out = (cpu->AF[0] & 0x01) ? 0x80 : 0x00;
+
+            cpu->AF[0] = (cpu->AF[0] >> 1) | carry_out;
+
+            if (carry_out) {
+                cpu->AF[1] |= FLAG_C;  
+            } else {
+                cpu->AF[1] &= ~FLAG_C; 
+            }
+
+            cpu->AF[1] &= ~(FLAG_Z | FLAG_N | FLAG_H);
+            break;
+        }
+        case RLA: {
+            uint8_t old_carry = (cpu->AF[1] & FLAG_C) ? 1 : 0; 
+            uint8_t new_carry = (cpu->AF[0] & 0x80) ? 1 : 0;    
+
+            cpu->AF[0] = (cpu->AF[0] << 1) | old_carry;        
+            // Update carry flag
+            if (new_carry) {
+                cpu->AF[1] |= FLAG_C;
+            } else {
+                cpu->AF[1] &= ~FLAG_C;
+            }
+
+            cpu->AF[1] &= ~(FLAG_Z | FLAG_N | FLAG_H);        
+            break;
+        }
+        case RRA: {
+            uint8_t old_carry = (cpu->AF[1] & FLAG_C) ? 0x80 : 0; 
+            uint8_t new_carry = (cpu->AF[0] & 0x01) ? 1 : 0;      
+
+            cpu->AF[0] = (cpu->AF[0] >> 1) | old_carry;           
+
+            if (new_carry) {
+                cpu->AF[1] |= FLAG_C;
+            } else {
+                cpu->AF[1] &= ~FLAG_C;
+            }
+
+            cpu->AF[1] &= ~(FLAG_Z | FLAG_N | FLAG_H);             
+            break;
+        }
+        case DAA: {
+            if ((cpu->AF[0] & 0x0F) > 0x09 || (cpu->AF[1] & FLAG_H)) {
+                cpu->AF[0] += 0x06;
+            }
+
+            if ((cpu->AF[0] & 0xF0) > 0x90 || (cpu->AF[1] & FLAG_C)) {
+                cpu->AF[0] += 0x60;
+                cpu->AF[1] |= FLAG_C;  
+            }
+
+            cpu->AF[1] &= ~FLAG_H;
+
+            if (cpu->AF[0] == 0) {
+                cpu->AF[1] |= FLAG_Z;
+            } else {
+                cpu->AF[1] &= ~FLAG_Z;
+            }            
+            break;
+        }
+        case CPL: {
+            cpu->AF[0] ^= 0xFF;
+            cpu->AF[1] |= (FLAG_N | FLAG_H);
+            break;
+        }
+        case SCF: {
+            cpu->AF[1] |= FLAG_C;
+            cpu->AF[1] &= ~(FLAG_N | FLAG_H);
+            break;
+        }
+        case CCF: {
+            cpu->AF[1] = (cpu->AF[1] & FLAG_C) ? (cpu->AF[1] & ~FLAG_C) : (cpu->AF[1] | FLAG_C);
+            cpu->AF[1] &= ~(FLAG_N | FLAG_H);
+            break;
+        }
+        case JR_IMM8: {
+            int8_t imm8 = (int8_t)fetch_next_byte(cpu, memory); // Signed since it's relative
+            cpu->PC = imm8;
+            break;
+        }
+        case STOP: {
+            // To be fully implemented once I set up the input system.
+            sleep(1000);
+            break;
+        }
+
+
+        case JP: {
             uint16_t address = fetch_next_byte(cpu, memory);
             address |= fetch_next_byte(cpu, memory) << 8;
-            cpu->PC = bytes;
+            cpu->PC = address;
             break;
-        case NOP:
+        }
+    
+    }
+
+    // For opcodes with an operand in bits 4 and 5
+    switch (opcode & 0xCF) {
+
+        case LD_R16_IMM16: {
+            uint8_t dest = (opcode & MASK_BIT_45) >> 4;
+            uint16_t imm16 = fetch_next_byte(cpu, memory);
+            imm16 |= fetch_next_byte(cpu, memory) << 8;
+            set_16bit_register(cpu, dest, imm16);
+            break;
+        }
+        case LD_R16MEM_A: {
+            uint8_t dest = (opcode & MASK_BIT_45) >> 4;
+            store_accumulator(cpu, memory, dest);
+            break;
+        }
+        case LD_A_R16MEM: {
+            uint8_t src = (opcode & MASK_BIT_45) >> 4;
+            load_accumulator(cpu, memory, src);
+            break;
+        }
+        case INC_R16: {
+            uint8_t operand = (opcode & MASK_BIT_45) >> 4;
+            inc_16bit_register(cpu, operand);
+            break;
+        }
+        case DEC_R16: {
+            uint8_t operand = (opcode & MASK_BIT_45) >> 4;
+            dec_16bit_register(cpu, operand);
+            break;
+        }
+        case ADD_HL_R16: {
+            uint8_t operand = (opcode & MASK_BIT_45) >> 4;
+            uint16_t r16_value = get_16bit_address(cpu, operand);
+            uint16_t hl_value = (cpu->HL[1] << 8) | cpu->HL[0];
+            uint32_t result = hl_value + r16_value;  // Use 32-bit to detect overflow
+
+            cpu->HL[0] = result & 0xFF;
+            cpu->HL[1] = (result >> 8) & 0xFF;
+
+            // Update flags
+            cpu->AF[1] &= ~(FLAG_N);  // Clear N flag (since it's an addition)
+            cpu->AF[1] = (result > 0xFFFF) ? (cpu->AF[1] | FLAG_C) : (cpu->AF[1] & ~FLAG_C);  // Set or clear Carry
+            cpu->AF[1] = ((hl_value & 0xFFF) + (r16_value & 0xFFF) > 0xFFF) ? (cpu->AF[1] | FLAG_H) : (cpu->AF[1] & ~FLAG_H);  // Set or clear Half Carry
+            break;
+        }
+    }
+
+    // For opcodes with an operand in bits 3, 4 and 5
+    switch (opcode & 0xC7) {
+        case INC_R8: {
+        uint8_t reg_code = (opcode & MASK_BIT_345) >> 3;
+        uint8_t* reg = get_8bit_register(cpu, reg_code);
+        (*reg)++;
+        // Update flags (Zero, Subtraction, Half Carry)
+        cpu->AF[1] = (*reg == 0) ? (cpu->AF[1] | FLAG_Z) : (cpu->AF[1] & ~FLAG_Z);
+        cpu->AF[1] &= ~FLAG_N;
+        cpu->AF[1] = ((*reg & 0x0F) == 0) ? (cpu->AF[1] | FLAG_H) : (cpu->AF[1] & ~FLAG_H);
+        break;
+        }
+        case DEC_R8: {
+            uint8_t reg_code = (opcode & MASK_BIT_345) >> 3;
+            uint8_t* reg = get_8bit_register(cpu, reg_code);
+            (*reg)--;
+            // Update flags (Zero, Subtraction, Half Carry)
+            cpu->AF[1] = (*reg == 0) ? (cpu->AF[1] | FLAG_Z) : (cpu->AF[1] & ~FLAG_Z);
+            cpu->AF[1] |= FLAG_N;
+            cpu->AF[1] = ((*reg & 0x0F) == 0x0F) ? (cpu->AF[1] | FLAG_H) : (cpu->AF[1] & ~FLAG_H);
+            break;
+        }
+        case LD_R8_IMM8: {
+            uint8_t reg_code = (opcode & MASK_BIT_345) >> 3;
+            uint8_t* reg = get_8bit_register(cpu, reg_code);
+            *reg = fetch_next_byte(cpu, memory);
+            break;
+        }
+    }
+
+    // For opcodes with an operand in bits 3 and 4
+    switch (opcode & 0xE7) {
+        case JR_COND_IMM8: {
+            uint8_t cond = opcode & MASK_BIT_34;  
+            int8_t imm8 = (int8_t)fetch_next_byte(cpu, memory);  
+
+            switch (cond) {
+                case 0x00:  // Not Zero (NZ)
+                    if (!(cpu->AF[1] & FLAG_Z)) cpu->PC += imm8;
+                    break;
+                case 0x08:  // Zero (Z)
+                    if (cpu->AF[1] & FLAG_Z) cpu->PC += imm8;
+                    break;
+                case 0x10:  // No Carry (NC)
+                    if (!(cpu->AF[1] & FLAG_C)) cpu->PC += imm8;
+                    break;
+                case 0x18:  // Carry (C)
+                    if (cpu->AF[1] & FLAG_C) cpu->PC += imm8;
+                    break;
+            }
+            break;
+        }
+    }
+}
+
+
+void set_16bit_register(CPU_registers* cpu, uint8_t reg_code, uint16_t value) {
+    switch (reg_code) {
+        case 0x00: cpu->BC[0] = value & 0xFF; cpu->BC[1] = (value >> 8) & 0xFF; break;
+        case 0x01: cpu->DE[0] = value & 0xFF; cpu->DE[1] = (value >> 8) & 0xFF; break;
+        case 0x02: cpu->HL[0] = value & 0xFF; cpu->HL[1] = (value >> 8) & 0xFF; break;
+        case 0x03: cpu->SP = value; break;
+    }
+}
+
+uint16_t get_16bit_address(CPU_registers* cpu, uint8_t reg_code) {
+    switch (reg_code) {
+        case 0x00: return (cpu->BC[1] << 8) | cpu->BC[0];
+        case 0x01: return (cpu->DE[1] << 8) | cpu->DE[0];
+        case 0x02: return (cpu->HL[1] << 8) | cpu->HL[0];
+        default: return 0;
+    }
+}
+
+void inc_16bit_register(CPU_registers* cpu, uint8_t reg_code) {
+    switch (reg_code) {
+        case 0x00: // BC
+            cpu->BC[0]++;
+            if (cpu->BC[0] == 0) cpu->BC[1]++; // Handle carry for low byte overflow
+            break;
+        case 0x01: // DE
+            cpu->DE[0]++;
+            if (cpu->DE[0] == 0) cpu->DE[1]++;
+            break;
+        case 0x02: // HL
+            cpu->HL[0]++;
+            if (cpu->HL[0] == 0) cpu->HL[1]++;
+            break;
+        case 0x03: // SP
+            cpu->SP++;
             break;
     }
 }
+
+void dec_16bit_register(CPU_registers* cpu, uint8_t reg_code) {
+    switch (reg_code) {
+        case 0x00: // BC
+            cpu->BC[0]--;
+            if (cpu->BC[0] == 0xFF) cpu->BC[1]--; // Handle carry for low byte overflow
+            break;
+        case 0x01: // DE
+            cpu->DE[0]--;
+            if (cpu->DE[0] == 0xFF) cpu->DE[1]--;
+            break;
+        case 0x02: // HL
+            cpu->HL[0]--;
+            if (cpu->HL[0] == 0xFF) cpu->HL[1]--;
+            break;
+        case 0x03: // SP
+            cpu->SP--;
+            break;
+    }
+}
+
+void store_accumulator(CPU_registers* cpu, uint8_t* memory, uint8_t dest_code) {
+    uint16_t addr = get_16bit_address(cpu, dest_code);
+    memory[addr] = cpu->AF[0];
+    if (dest_code == 0x02) {  // HL+ (HLI)
+        cpu->HL[0]++;
+        if (cpu->HL[0] == 0) cpu->HL[1]++;
+    } else if (dest_code == 0x03) {  // HL- (HLD)
+        cpu->HL[0]--;
+        if (cpu->HL[0] == 0xFF) cpu->HL[1]--;
+    }
+}
+
+void load_accumulator(CPU_registers* cpu, uint8_t* memory, uint8_t src_code) {
+    uint16_t addr = get_16bit_address(cpu, src_code);
+    cpu->AF[0] = memory[addr];
+    if (src_code == 0x02) {  // HL+ (HLI)
+        cpu->HL[0]++;
+        if (cpu->HL[0] == 0) cpu->HL[1]++;
+    } else if (src_code == 0x03) {  // HL- (HLD)
+        cpu->HL[0]--;
+        if (cpu->HL[0] == 0xFF) cpu->HL[1]--;
+    }
+}
+
+uint8_t* get_8bit_register(CPU_registers* cpu, uint8_t reg_code) {
+    switch (reg_code) {
+        case 0x00: return &cpu->BC[1];  // B
+        case 0x01: return &cpu->BC[0];  // C
+        case 0x02: return &cpu->DE[1];  // D
+        case 0x03: return &cpu->DE[0];  // E
+        case 0x04: return &cpu->HL[1];  // H
+        case 0x05: return &cpu->HL[0];  // L
+        case 0x07: return &cpu->AF[0];  // A
+        default: return NULL;
+    }
+}
+
+
