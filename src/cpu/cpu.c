@@ -238,6 +238,90 @@ void decode_execute_opcode(CPU_registers* cpu, uint8_t opcode, uint8_t* memory) 
             break;
         }
     }
+
+    // For opcodes with an operand in bits 3, 4, 5 and another one in bits 0, 1, 2
+    switch (opcode & 0xC0) {
+        case 0x40: {  // LD_R8_R8 instruction block
+            uint8_t src = opcode & MASK_BIT_012;
+            uint8_t dest = (opcode & MASK_BIT_345) >> 3;
+            if (opcode == HALT) {
+                sleep(1000);
+            } else {
+                set_8bit_register(cpu, dest, get_8bit_register(cpu, src));
+            }
+            break;
+        }
+    }
+
+    // For opcodes with an operand in bits 0, 1, 2
+    switch (opcode & 0xF8) {
+        case ADD_A_R8:
+            uint8_t operand = get_8bit_register(cpu, opcode & MASK_BIT_012);
+            cpu->AF[1] = 0;  // Clear flags
+            if (((cpu->AF[0] & 0x0F) + (operand & 0x0F)) > 0x0F) cpu->AF[1] |= FLAG_H; // Half-Carry
+            if ((cpu->AF[0] + operand) > 0xFF) cpu->AF[1] |= FLAG_C; // Carry
+            cpu->AF[0] += operand;
+            if (cpu->AF[0] == 0) cpu->AF[1] |= FLAG_Z; // Zero flag
+            break;
+
+        case ADC_A_R8:
+            uint8_t operand = get_8bit_register(cpu, opcode & MASK_BIT_012);
+            uint8_t carry = (cpu->AF[1] & FLAG_C) ? 1 : 0;
+            cpu->AF[1] = 0;  // Clear flags
+            if (((cpu->AF[0] & 0x0F) + (operand & 0x0F) + carry) > 0x0F) cpu->AF[1] |= FLAG_H; // Half-Carry
+            if ((cpu->AF[0] + operand + carry) > 0xFF) cpu->AF[1] |= FLAG_C; // Carry
+            cpu->AF[0] += operand + carry;
+            if (cpu->AF[0] == 0) cpu->AF[1] |= FLAG_Z; // Zero flag
+            break;
+
+        case SUB_A_R8:
+            uint8_t operand = get_8bit_register(cpu, opcode & MASK_BIT_012);
+            cpu->AF[1] = FLAG_N;  // Set subtract flag
+            if ((cpu->AF[0] & 0x0F) < (operand & 0x0F)) cpu->AF[1] |= FLAG_H; // Half-Carry
+            if (cpu->AF[0] < operand) cpu->AF[1] |= FLAG_C; // Carry
+            cpu->AF[0] -= operand;
+            if (cpu->AF[0] == 0) cpu->AF[1] |= FLAG_Z; // Zero flag
+            break;
+
+        case SBC_A_R8:
+            uint8_t operand = get_8bit_register(cpu, opcode & MASK_BIT_012);
+            carry = (cpu->AF[1] & FLAG_C) ? 1 : 0;
+            cpu->AF[1] = FLAG_N;  // Set subtract flag
+            if ((cpu->AF[0] & 0x0F) < ((operand & 0x0F) + carry)) cpu->AF[1] |= FLAG_H; // Half-Carry
+            if (cpu->AF[0] < (operand + carry)) cpu->AF[1] |= FLAG_C; // Carry
+            cpu->AF[0] -= operand + carry;
+            if (cpu->AF[0] == 0) cpu->AF[1] |= FLAG_Z; // Zero flag
+            break;
+
+        case AND_A_R8:
+            uint8_t operand = get_8bit_register(cpu, opcode & MASK_BIT_012);
+            cpu->AF[0] &= operand;
+            cpu->AF[1] = FLAG_H;  // Clear all flags except Half-Carry (bitwise AND always sets Half-Carry)
+            if (cpu->AF[0] == 0) cpu->AF[1] |= FLAG_Z; // Zero flag
+            break;
+
+        case XOR_A_R8:
+            uint8_t operand = get_8bit_register(cpu, opcode & MASK_BIT_012);
+            cpu->AF[0] ^= operand;
+            cpu->AF[1] = 0;  // Clear all flags
+            if (cpu->AF[0] == 0) cpu->AF[1] |= FLAG_Z; // Zero flag
+            break;
+
+        case OR_A_R8:
+            uint8_t operand = get_8bit_register(cpu, opcode & MASK_BIT_012);
+            cpu->AF[0] |= operand;
+            cpu->AF[1] = 0;  // Clear all flags
+            if (cpu->AF[0] == 0) cpu->AF[1] |= FLAG_Z; // Zero flag
+            break;
+
+        case CP_A_R8:
+            uint8_t operand = get_8bit_register(cpu, opcode & MASK_BIT_012);
+            cpu->AF[1] = FLAG_N;  // Set subtract flag
+            if ((cpu->AF[0] & 0x0F) < (operand & 0x0F)) cpu->AF[1] |= FLAG_H; // Half-Carry
+            if (cpu->AF[0] < operand) cpu->AF[1] |= FLAG_C; // Carry
+            if ((cpu->AF[0] - operand) == 0) cpu->AF[1] |= FLAG_Z; // Zero flag
+            break;
+    }
 }
 
 
@@ -298,6 +382,37 @@ void dec_16bit_register(CPU_registers* cpu, uint8_t reg_code) {
             break;
     }
 }
+
+// Function to set the value of an 8-bit register
+void set_8bit_register(CPU_registers* cpu, uint8_t reg_code, uint8_t value) {
+    switch (reg_code) {
+        case 0x00: cpu->B = value; break;
+        case 0x01: cpu->C = value; break;
+        case 0x02: cpu->D = value; break;
+        case 0x03: cpu->E = value; break;
+        case 0x04: cpu->H = value; break;
+        case 0x05: cpu->L = value; break;
+        case 0x06: cpu->memory[(cpu->HL[1] << 8) | cpu->HL[0]] = value; break; // [HL] memory location
+        case 0x07: cpu->A = value; break;
+        default: break; // Undefined register code
+    }
+}
+
+// Function to get the value of an 8-bit register
+uint8_t get_8bit_register(CPU_registers* cpu, uint8_t reg_code) {
+    switch (reg_code) {
+        case 0x00: return cpu->B;
+        case 0x01: return cpu->C;
+        case 0x02: return cpu->D;
+        case 0x03: return cpu->E;
+        case 0x04: return cpu->H;
+        case 0x05: return cpu->L;
+        case 0x06: return cpu->memory[(cpu->HL[1] << 8) | cpu->HL[0]]; // [HL] memory location
+        case 0x07: return cpu->A;
+        default: return 0; // Undefined register code
+    }
+}
+
 
 void store_accumulator(CPU_registers* cpu, uint8_t* memory, uint8_t dest_code) {
     uint16_t addr = get_16bit_address(cpu, dest_code);

@@ -5,6 +5,7 @@
 #define MASK_BIT_45 0x30
 #define MASK_BIT_345 0x38  
 #define MASK_BIT_34 0x18
+#define MASK_BIT_012 0x07
 
 //// BLOCK 0 instructions ////
 #define NOP 0x00
@@ -35,6 +36,20 @@
 #define JR_COND_IMM8 0x20
 
 #define STOP 0x10
+
+///// Block 1: 8-bit register-to-register loads ////
+#define LD_R8_R8 0x40
+#define HALT 0x75
+
+//// Block 2: 8-bit arithmetics ////
+#define ADD_A_R8 0x80
+#define ADC_A_R8 0x88
+#define SUB_A_R8 0x90
+#define SBC_A_R8 0x98
+#define AND_A_R8 0xA0
+#define XOR_A_R8 0xA8
+#define OR_A_R8 0xB0
+#define CP_A_R8 0xB8
 
 #define JP 0xC3
 
