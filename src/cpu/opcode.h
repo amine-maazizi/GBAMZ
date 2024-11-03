@@ -51,6 +51,26 @@
 #define OR_A_R8 0xB0
 #define CP_A_R8 0xB8
 
-#define JP 0xC3
+// Block 3
+#define ADD_A_IMM8 0xC6
+#define ADC_A_IMM8 0xCE
+#define SUB_A_IMM8 0xD6
+#define SBC_A_IMM8 0xDE
+#define AND_A_IMM8 0xE6
+#define XOR_A_IMM8 0xEE
+#define OR_A_IMM8 0xF6
+#define CP_A_IMM8 0xFE
+
+
+#define RET_COND 0xC0
+#define RET 0xC9
+#define RETI 0xD9
+#define JP_COND_IMM16  0xC2
+#define JP_IMM16 0xC3
+#define JP_HL 0xE9
+#define CALL_COND_IMM16 0xC4
+#define CALL_IMM16 0xCD
+#define RST_TGT3 0xC7
+
 
 #endif 

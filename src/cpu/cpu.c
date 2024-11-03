@@ -15,7 +15,7 @@ uint8_t fetch_next_byte(CPU_registers* cpu, uint8_t* memory)
 };
 
 void decode_execute_opcode(CPU_registers* cpu, uint8_t opcode, uint8_t* memory) {
-    // For opcodes with no operand
+    // For opcodes with no operand BLOCKS 0, 1, 2
     switch (opcode) {
         case NOP:
             break;
@@ -127,12 +127,112 @@ void decode_execute_opcode(CPU_registers* cpu, uint8_t opcode, uint8_t* memory) 
             sleep(1000);
             break;
         }
+    }
 
+    // For opcodes with no operands BLOCK 3
+    switch (opcode) {
+        case ADD_A_IMM8:
+            uint8_t imm8 = fetch_next_byte(cpu, memory);
+            cpu->AF[1] = 0;  // Clear flags
+            if (((cpu->AF[0] & 0x0F) + (imm8 & 0x0F)) > 0x0F) cpu->AF[1] |= FLAG_H; // Half-Carry
+            if ((cpu->AF[0] + imm8) > 0xFF) cpu->AF[1] |= FLAG_C; // Carry
+            cpu->AF[0] += imm8;
+            if (cpu->AF[0] == 0) cpu->AF[1] |= FLAG_Z; // Zero flag
+            break;
 
-        case JP: {
+        case ADC_A_IMM8:
+            uint8_t imm8 = fetch_next_byte(cpu, memory);
+            uint8_t carry = (cpu->AF[1] & FLAG_C) ? 1 : 0;
+            cpu->AF[1] = 0;  // Clear flags
+            if (((cpu->AF[0] & 0x0F) + (imm8 & 0x0F) + carry) > 0x0F) cpu->AF[1] |= FLAG_H; // Half-Carry
+            if ((cpu->AF[0] + imm8 + carry) > 0xFF) cpu->AF[1] |= FLAG_C; // Carry
+            cpu->AF[0] += imm8 + carry;
+            if (cpu->AF[0] == 0) cpu->AF[1] |= FLAG_Z; // Zero flag
+            break;
+
+        case SUB_A_IMM8:
+            uint8_t imm8 = fetch_next_byte(cpu, memory);
+            cpu->AF[1] = FLAG_N;  // Set subtract flag
+            if ((cpu->AF[0] & 0x0F) < (imm8 & 0x0F)) cpu->AF[1] |= FLAG_H; // Half-Carry
+            if (cpu->AF[0] < imm8) cpu->AF[1] |= FLAG_C; // Carry
+            cpu->AF[0] -= imm8;
+            if (cpu->AF[0] == 0) cpu->AF[1] |= FLAG_Z; // Zero flag
+            break;
+
+        case SBC_A_IMM8:
+            uint8_t imm8 = fetch_next_byte(cpu, memory);
+            carry = (cpu->AF[1] & FLAG_C) ? 1 : 0;
+            cpu->AF[1] = FLAG_N;  // Set subtract flag
+            if ((cpu->AF[0] & 0x0F) < ((imm8 & 0x0F) + carry)) cpu->AF[1] |= FLAG_H; // Half-Carry
+            if (cpu->AF[0] < (imm8 + carry)) cpu->AF[1] |= FLAG_C; // Carry
+            if (cpu->AF[0] - imm8 - carry == 0) cpu->AF[1] |= FLAG_Z; // Zero flag
+            cpu->AF[0] -= (imm8 + carry);
+            break;
+
+        case AND_A_IMM8:
+            uint8_t imm8 = fetch_next_byte(cpu, memory);
+            cpu->AF[0] &= imm8;
+            cpu->AF[1] = FLAG_H;  // Clear all flags except Half-Carry (bitwise AND always sets Half-Carry)
+            if (cpu->AF[0] == 0) cpu->AF[1] |= FLAG_Z; // Zero flag
+            break;
+
+        case XOR_A_IMM8:
+            uint8_t imm8 = fetch_next_byte(cpu, memory);
+            cpu->AF[0] ^= imm8;
+            cpu->AF[1] = 0;  // Clear all flags
+            if (cpu->AF[0] == 0) cpu->AF[1] |= FLAG_Z; // Zero flag
+            break;
+
+        case OR_A_IMM8:
+            uint8_t imm8 = fetch_next_byte(cpu, memory);
+            cpu->AF[0] |= imm8;
+            cpu->AF[1] = 0;  // Clear all flags
+            if (cpu->AF[0] == 0) cpu->AF[1] |= FLAG_Z; // Zero flag
+            break;
+
+        case CP_A_IMM8:
+            uint8_t imm8 = fetch_next_byte(cpu, memory);
+            cpu->AF[1] = FLAG_N;  // Set subtract flag
+            if ((cpu->AF[0] & 0x0F) < (imm8 & 0x0F)) cpu->AF[1] |= FLAG_H; // Half-Carry
+            if (cpu->AF[0] < imm8) cpu->AF[1] |= FLAG_C; // Carry
+            if ((cpu->AF[0] - imm8) == 0) cpu->AF[1] |= FLAG_Z; // Zero flag
+            break;
+    
+        case RET: {
+            cpu->PC = memory[cpu->SP] | (memory[cpu->SP + 1] << 8);
+            cpu->SP += 2;
+            break;
+        }
+
+        case RETI: {
+            // To be completed once the interupt system is completed
+            cpu->PC = memory[cpu->SP] | (memory[cpu->SP + 1] << 8);
+            cpu->SP += 2;
+            break;
+        }
+
+        case JP_IMM16: {
             uint16_t address = fetch_next_byte(cpu, memory);
             address |= fetch_next_byte(cpu, memory) << 8;
             cpu->PC = address;
+            break;
+        }
+
+        case JP_HL: {
+            cpu->PC = (cpu->HL[0] << 8)| cpu->HL[1];
+            break;
+        }
+       
+        case CALL_IMM16: {
+            // Stack grows downward so here we're creating space 
+            cpu->SP -= 2;  // Decrement stack pointer by 2 to make space for PC
+            memory[cpu->SP] = cpu->PC & 0xFF;         // Store lower byte of PC
+            memory[cpu->SP + 1] = (cpu->PC >> 8) & 0xFF;      // Store upper byte of PC
+
+
+            uint16_t address = fetch_next_byte(cpu, memory);
+            address |= fetch_next_byte(cpu, memory) << 8;
+            cpu->PC = address; 
             break;
         }
     
@@ -188,14 +288,14 @@ void decode_execute_opcode(CPU_registers* cpu, uint8_t opcode, uint8_t* memory) 
     // For opcodes with an operand in bits 3, 4 and 5
     switch (opcode & 0xC7) {
         case INC_R8: {
-        uint8_t reg_code = (opcode & MASK_BIT_345) >> 3;
-        uint8_t* reg = get_8bit_register(cpu, reg_code);
-        (*reg)++;
-        // Update flags (Zero, Subtraction, Half Carry)
-        cpu->AF[1] = (*reg == 0) ? (cpu->AF[1] | FLAG_Z) : (cpu->AF[1] & ~FLAG_Z);
-        cpu->AF[1] &= ~FLAG_N;
-        cpu->AF[1] = ((*reg & 0x0F) == 0) ? (cpu->AF[1] | FLAG_H) : (cpu->AF[1] & ~FLAG_H);
-        break;
+            uint8_t reg_code = (opcode & MASK_BIT_345) >> 3;
+            uint8_t* reg = get_8bit_register(cpu, reg_code);
+            (*reg)++;
+            // Update flags (Zero, Subtraction, Half Carry)
+            cpu->AF[1] = (*reg == 0) ? (cpu->AF[1] | FLAG_Z) : (cpu->AF[1] & ~FLAG_Z);
+            cpu->AF[1] &= ~FLAG_N;
+            cpu->AF[1] = ((*reg & 0x0F) == 0) ? (cpu->AF[1] | FLAG_H) : (cpu->AF[1] & ~FLAG_H);
+            break;
         }
         case DEC_R8: {
             uint8_t reg_code = (opcode & MASK_BIT_345) >> 3;
@@ -213,31 +313,137 @@ void decode_execute_opcode(CPU_registers* cpu, uint8_t opcode, uint8_t* memory) 
             *reg = fetch_next_byte(cpu, memory);
             break;
         }
+
+        case RST_TGT3: {
+            uint8_t operand = (opcode & MASK_BIT_345) >> 3;
+
+            switch (operand) {
+                case 0x00: cpu->PC = 0x00; break;
+                case 0x01: cpu->PC = 0x08; break;
+                case 0x02: cpu->PC = 0x10; break;
+                case 0x03: cpu->PC = 0x18; break;
+                case 0x04: cpu->PC = 0x20; break;
+                case 0x05: cpu->PC = 0x28; break;
+                case 0x06: cpu->PC = 0x30; break;
+                case 0x07: cpu->PC = 0x38; break;
+            }
+        }
+
     }
 
-    // For opcodes with an operand in bits 3 and 4
+// For opcodes with an operand in bits 3 and 4
     switch (opcode & 0xE7) {
         case JR_COND_IMM8: {
             uint8_t cond = opcode & MASK_BIT_34;  
             int8_t imm8 = (int8_t)fetch_next_byte(cpu, memory);  
+            bool should_jump = false;
 
             switch (cond) {
                 case 0x00:  // Not Zero (NZ)
-                    if (!(cpu->AF[1] & FLAG_Z)) cpu->PC += imm8;
+                    should_jump = !(cpu->AF[1] & FLAG_Z);
                     break;
                 case 0x08:  // Zero (Z)
-                    if (cpu->AF[1] & FLAG_Z) cpu->PC += imm8;
+                    should_jump = cpu->AF[1] & FLAG_Z;
                     break;
                 case 0x10:  // No Carry (NC)
-                    if (!(cpu->AF[1] & FLAG_C)) cpu->PC += imm8;
+                    should_jump = !(cpu->AF[1] & FLAG_C);
                     break;
                 case 0x18:  // Carry (C)
-                    if (cpu->AF[1] & FLAG_C) cpu->PC += imm8;
+                    should_jump = cpu->AF[1] & FLAG_C;
                     break;
+            }
+
+            if (should_jump) {
+                cpu->PC += imm8;
+            }
+            break;
+        }
+
+        case RET_COND: {
+            uint8_t cond = opcode & MASK_BIT_34;  
+            bool should_return = false;
+
+            switch (cond) {
+                case 0x00:  // Not Zero (NZ)
+                    should_return = !(cpu->AF[1] & FLAG_Z);
+                    break;
+                case 0x08:  // Zero (Z)
+                    should_return = cpu->AF[1] & FLAG_Z;
+                    break;
+                case 0x10:  // No Carry (NC)
+                    should_return = !(cpu->AF[1] & FLAG_C);
+                    break;
+                case 0x18:  // Carry (C)
+                    should_return = cpu->AF[1] & FLAG_C;
+                    break;
+            }
+
+            if (should_return) {
+                cpu->PC = memory[cpu->SP] | (memory[cpu->SP + 1] << 8);
+                cpu->SP += 2;
+            }
+            break;
+        }
+
+        case JP_COND_IMM16: {
+            uint8_t cond = opcode & MASK_BIT_34;  
+            bool should_jump = false;
+
+            switch (cond) {
+                case 0x00:  // Not Zero (NZ)
+                    should_jump = !(cpu->AF[1] & FLAG_Z);
+                    break;
+                case 0x08:  // Zero (Z)
+                    should_jump = cpu->AF[1] & FLAG_Z;
+                    break;
+                case 0x10:  // No Carry (NC)
+                    should_jump = !(cpu->AF[1] & FLAG_C);
+                    break;
+                case 0x18:  // Carry (C)
+                    should_jump = cpu->AF[1] & FLAG_C;
+                    break;
+            }
+
+            if (should_jump) {
+                uint16_t address = fetch_next_byte(cpu, memory);
+                address |= fetch_next_byte(cpu, memory) << 8;
+                cpu->PC = address;
+            }
+            break;
+        }
+
+        case CALL_COND_IMM16: {
+            uint8_t cond = opcode & MASK_BIT_34;  
+            bool should_call = false;
+
+            switch (cond) {
+                case 0x00:  // Not Zero (NZ)
+                    should_call = !(cpu->AF[1] & FLAG_Z);
+                    break;
+                case 0x08:  // Zero (Z)
+                    should_call = cpu->AF[1] & FLAG_Z;
+                    break;
+                case 0x10:  // No Carry (NC)
+                    should_call = !(cpu->AF[1] & FLAG_C);
+                    break;
+                case 0x18:  // Carry (C)
+                    should_call = cpu->AF[1] & FLAG_C;
+                    break;
+            }
+
+            if (should_call) {
+                cpu->SP -= 2;  
+                memory[cpu->SP] = cpu->PC & 0xFF;         // Store lower byte of PC
+                memory[cpu->SP + 1] = (cpu->PC >> 8) & 0xFF;  // Store upper byte of PC
+
+                uint16_t address = fetch_next_byte(cpu, memory);
+                address |= fetch_next_byte(cpu, memory) << 8;
+                cpu->PC = address;
             }
             break;
         }
     }
+
 
     // For opcodes with an operand in bits 3, 4, 5 and another one in bits 0, 1, 2
     switch (opcode & 0xC0) {
@@ -289,8 +495,8 @@ void decode_execute_opcode(CPU_registers* cpu, uint8_t opcode, uint8_t* memory) 
             cpu->AF[1] = FLAG_N;  // Set subtract flag
             if ((cpu->AF[0] & 0x0F) < ((operand & 0x0F) + carry)) cpu->AF[1] |= FLAG_H; // Half-Carry
             if (cpu->AF[0] < (operand + carry)) cpu->AF[1] |= FLAG_C; // Carry
-            cpu->AF[0] -= operand + carry;
-            if (cpu->AF[0] == 0) cpu->AF[1] |= FLAG_Z; // Zero flag
+            if (cpu->AF[0] - operand - carry == 0) cpu->AF[1] |= FLAG_Z; // Zero flag
+            cpu->AF[0] -= (operand + carry);
             break;
 
         case AND_A_R8:
