@@ -283,7 +283,53 @@ void decode_execute_opcode(CPU_registers* cpu, uint8_t opcode, uint8_t* memory) 
             cpu->AF[1] = ((hl_value & 0xFFF) + (r16_value & 0xFFF) > 0xFFF) ? (cpu->AF[1] | FLAG_H) : (cpu->AF[1] & ~FLAG_H);  // Set or clear Half Carry
             break;
         }
+
+
+        case POP_R16STK: { 
+            uint8_t operand = (opcode & MASK_BIT_45) >> 4;  
+            switch (operand) {
+                case 0x00:  // POP BC
+                    cpu->BC = cpu->memory[cpu->SP] | (cpu->memory[cpu->SP + 1] << 8);
+                    break;
+                case 0x01:  // POP DE
+                    cpu->DE = cpu->memory[cpu->SP] | (cpu->memory[cpu->SP + 1] << 8);
+                    break;
+                case 0x02:  // POP HL
+                    cpu->HL = cpu->memory[cpu->SP] | (cpu->memory[cpu->SP + 1] << 8);
+                    break;
+                case 0x03:  // POP AF
+                    cpu->AF = cpu->memory[cpu->SP] | (cpu->memory[cpu->SP + 1] << 8);
+                    break;
+            }
+            cpu->SP += 2;  // Move stack pointer up by 2
+            break;
+        }
+
+        case PUSH_R16STK: {
+            uint8_t operand = (opcode & MASK_BIT_45) >> 4;  
+            cpu->SP -= 2;  // Decrement stack pointer by 2 to make space
+            switch (operand) {
+                case 0x00:  // PUSH BC
+                    cpu->memory[cpu->SP] = cpu->BC & 0xFF;
+                    cpu->memory[cpu->SP + 1] = (cpu->BC >> 8) & 0xFF;
+                    break;
+                case 0x01:  // PUSH DE
+                    cpu->memory[cpu->SP] = cpu->DE & 0xFF;
+                    cpu->memory[cpu->SP + 1] = (cpu->DE >> 8) & 0xFF;
+                    break;
+                case 0x02:  // PUSH HL
+                    cpu->memory[cpu->SP] = cpu->HL & 0xFF;
+                    cpu->memory[cpu->SP + 1] = (cpu->HL >> 8) & 0xFF;
+                    break;
+                case 0x03:  // PUSH AF
+                    cpu->memory[cpu->SP] = cpu->AF & 0xFF;
+                    cpu->memory[cpu->SP + 1] = (cpu->AF >> 8) & 0xFF;
+                    break;
+            }
+            break;
+        }
     }
+
 
     // For opcodes with an operand in bits 3, 4 and 5
     switch (opcode & 0xC7) {

@@ -73,4 +73,7 @@
 #define RST_TGT3 0xC7
 
 
+#define POP_R16STK 0xC1
+#define PUSH_R16STK 0xC6
+
 #endif 
