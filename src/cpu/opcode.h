@@ -61,7 +61,6 @@
 #define OR_A_IMM8 0xF6
 #define CP_A_IMM8 0xFE
 
-
 #define RET_COND 0xC0
 #define RET 0xC9
 #define RETI 0xD9
@@ -72,8 +71,21 @@
 #define CALL_IMM16 0xCD
 #define RST_TGT3 0xC7
 
-
 #define POP_R16STK 0xC1
 #define PUSH_R16STK 0xC6
+
+#define LDH_C_A 0xE2
+#define LDH_IMM8_A 0xE0
+#define LD_IMM16_A 0xEA
+#define LDH_A_C 0xF2
+#define LDH_A_IMM8 0xF0
+#define LD_A_IMM16 0xFA
+
+#define ADD_SP_IMM8 0xE8
+#define LD_HL_SP_P_IMM8 0xF8
+#define LD_SP_HL 0xF9
+
+#define DI 0xF3
+#define EI 0xFB
 
 #endif 

@@ -236,6 +236,52 @@ void decode_execute_opcode(CPU_registers* cpu, uint8_t opcode, uint8_t* memory) 
             break;
         }
     
+        case LDH_C_A: {
+            memory[0xFF << 8 | cpu->BC[1]] = cpu->AF[0]; break;
+        }
+        case LDH_IMM8_A: {
+            uint8_t address = fetch_next_byte(cpu, memory);
+            memory[0xFF << 8 | address] = cpu->AF[0]; break;
+        }
+        case LD_IMM16_A: {
+            uint16_t address = fetch_next_byte(cpu, memory) | fetch_next_byte(cpu, memory) << 8;
+            memory[address] = cpu->AF[0]; break;
+        }
+        case LDH_A_C: {
+            cpu->AF[0] = memory[0xFF << 8 | cpu->BC[1]]; break;
+        }
+        case LDH_A_IMM8: {
+            uint8_t address = fetch_next_byte(cpu, memory);
+            cpu->AF[0] = memory[0xFF << 8 | address]; break;
+        }
+        case LDH_A_IMM16: {
+            uint16_t address = fetch_next_byte(cpu, memory) | fetch_next_byte(cpu, memory) << 8;
+            cpu->AF[0] = memory[address]; break;
+        }
+
+    }
+
+    // Another block for opcodes with no operands BLOCK 3
+    switch (opcode) {
+        case ADD_SP_IMM8: {
+            int8_t address = (int8_t)fetch_next_byte(cpun memory); // [-128, 127] 
+            cpu->SP += address; break;
+        }
+        case LD_HL_SP_P_IMM8: {
+            int8_t address = (int8_t)fetch_next_byte(cpun memory); // [-128, 127] 
+            cpu->HL = cpu->SP + address; break;
+        }
+        case LD_SP_HL: {
+            cpu->SP = cpu->HL; break;
+        }
+        case DI: {
+            // TBI ONCE THE INTERUPTS ARE CODED IN.
+            break;
+        }
+        case EI: {
+            // SAME
+            break;
+        }
     }
 
     // For opcodes with an operand in bits 4 and 5
