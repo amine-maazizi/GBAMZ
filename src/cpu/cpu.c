@@ -15,7 +15,26 @@ uint8_t fetch_next_byte(CPU_registers* cpu, uint8_t* memory)
 };
 
 void decode_execute_opcode(CPU_registers* cpu, uint8_t opcode, uint8_t* memory) {
-    // For opcodes with no operand BLOCKS 0, 1, 2
+    // Invalid opcodes that hard lock the CPU
+    bool hard_lock = false;
+    switch (opcode) {
+        case 0xD3: hard_lock = true; break;
+        case 0xDB: hard_lock = true; break;
+        case 0xDD: hard_lock = true; break;
+        case 0xE3: hard_lock = true; break;
+        case 0xE4: hard_lock = true; break;
+        case 0xEC: hard_lock = true; break;
+        case 0xED: hard_lock = true; break;
+        case 0xF4: hard_lock = true; break;
+        case 0xFC: hard_lock = true; break;
+        case 0xFD: hard_lock = true; break;
+    }
+
+    if (hard_lock) {
+        while (true) {};
+    }
+
+    // For opcodes with no operand BLOCKS 0, 1, 2 (MAY NEED ROT OPS FIX)
     switch (opcode) {
         case NOP:
             break;
@@ -40,7 +59,7 @@ void decode_execute_opcode(CPU_registers* cpu, uint8_t opcode, uint8_t* memory) 
             break;
         }
         case RRCA: {
-            uint8_t carry_out = (cpu->AF[0] & 0x01) ? 0x80 : 0x00;
+            uint8_t carry_out = (cpu->AF[0] & 0x80) ? 0x80 : 0x00;
 
             cpu->AF[0] = (cpu->AF[0] >> 1) | carry_out;
 
@@ -55,7 +74,7 @@ void decode_execute_opcode(CPU_registers* cpu, uint8_t opcode, uint8_t* memory) 
         }
         case RLA: {
             uint8_t old_carry = (cpu->AF[1] & FLAG_C) ? 1 : 0; 
-            uint8_t new_carry = (cpu->AF[0] & 0x80) ? 1 : 0;    
+            uint8_t new_carry = (cpu->AF[0] & FLAG_C) ? 1 : 0;    
 
             cpu->AF[0] = (cpu->AF[0] << 1) | old_carry;        
             // Update carry flag
@@ -69,8 +88,8 @@ void decode_execute_opcode(CPU_registers* cpu, uint8_t opcode, uint8_t* memory) 
             break;
         }
         case RRA: {
-            uint8_t old_carry = (cpu->AF[1] & FLAG_C) ? 0x80 : 0; 
-            uint8_t new_carry = (cpu->AF[0] & 0x01) ? 1 : 0;      
+            uint8_t old_carry = (cpu->AF[1] & FLAG_C) ? FLAG_C : 0; 
+            uint8_t new_carry = (cpu->AF[0] & FLAG_C) ? 1 : 0;      
 
             cpu->AF[0] = (cpu->AF[0] >> 1) | old_carry;           
 
@@ -620,6 +639,107 @@ void decode_execute_opcode(CPU_registers* cpu, uint8_t opcode, uint8_t* memory) 
             if ((cpu->AF[0] - operand) == 0) cpu->AF[1] |= FLAG_Z; // Zero flag
             break;
     }
+
+    // Another block for opcodes with an operand in bits 0, 1, 2
+    switch (opcode & 0xF8) {
+        case RLC_R8: {
+            uint8_t operand = opcode & MASK_BIT_012;
+            uint8_t* target = NULL; // Pointer to the target register
+
+            switch (operand) {
+                case 0x00: target = &cpu->BC[0]; break;
+                case 0x01: target = &cpu->BC[1]; break;
+                case 0x02: target = &cpu->DE[0]; break;
+                case 0x03: target = &cpu->DE[1]; break;
+                case 0x04: target = &cpu->HL[0]; break;
+                case 0x05: target = &cpu->HL[1]; break;
+                case 0x06: target = &memory[cpu->HL[0] | (cpu->HL[1] << 8)]; break;
+                case 0x07: target = &cpu->AF[0]; break;
+            }
+
+            if (target) {
+                uint8_t old_bit7 = (*target & 0x80) >> 7;  // Capture bit 7 before rotating
+                *target = (*target << 1) | old_bit7;        // Rotate left circular
+
+                // Update flags
+                cpu->AF[1] &= ~(FLAG_Z | FLAG_N | FLAG_H);  // Clear Z, N, and H flags
+                if (old_bit7) {
+                    cpu->AF[1] |= FLAG_C;  // Set carry flag if bit 7 was 1
+                } else {
+                    cpu->AF[1] &= ~FLAG_C; // Clear carry flag if bit 7 was 0
+                }
+                if (*target == 0) {
+                    cpu->AF[1] |= FLAG_Z;  // Set zero flag if result is zero
+                }
+            }
+            break;
+        }
+        case RRC_R8: {
+            uint8_t operand = opcode & MASK_BIT_012;
+            uint8_t* target = NULL; // Pointer to the target register
+
+            switch (operand) {
+                case 0x00: target = &cpu->BC[0]; break;
+                case 0x01: target = &cpu->BC[1]; break;
+                case 0x02: target = &cpu->DE[0]; break;
+                case 0x03: target = &cpu->DE[1]; break;
+                case 0x04: target = &cpu->HL[0]; break;
+                case 0x05: target = &cpu->HL[1]; break;
+                case 0x06: target = &memory[cpu->HL[0] | (cpu->HL[1] << 8)]; break;
+                case 0x07: target = &cpu->AF[0]; break;
+            }
+
+            if (target) {
+                uint8_t old_bit7 = (*target & 0x01);  
+                *target = (*target >> 1) | (old_bit7 << 7);        // Rotate left circular
+
+                 // Update flags
+                cpu->AF[1] &= ~(FLAG_Z | FLAG_N | FLAG_H);  // Clear Z, N, and H flags
+                if (old_bit0) {
+                    cpu->AF[1] |= FLAG_C;  // Set carry flag if bit 0 was 1
+                } else {
+                    cpu->AF[1] &= ~FLAG_C; // Clear carry flag if bit 0 was 0
+                }
+                if (*target == 0) {
+                    cpu->AF[1] |= FLAG_Z;  // Set zero flag if result is zero
+                }
+            }
+            break;
+        }
+        case RL_R8: {
+            uint8_t operand = opcode & MASK_BIT_012;
+            uint8_t* target = NULL; // Pointer to the target register
+
+            switch (operand) {
+                case 0x00: target = &cpu->BC[0]; break;
+                case 0x01: target = &cpu->BC[1]; break;
+                case 0x02: target = &cpu->DE[0]; break;
+                case 0x03: target = &cpu->DE[1]; break;
+                case 0x04: target = &cpu->HL[0]; break;
+                case 0x05: target = &cpu->HL[1]; break;
+                case 0x06: target = &memory[cpu->HL[0] | (cpu->HL[1] << 8)]; break;
+                case 0x07: target = &cpu->AF[0]; break;
+            }
+
+            if (target) {
+                uint8_t old_bit7 = (*target & 0x80) >> 7; 
+                *target = (*target << 1) | ((cpu->AF[1] | FLAG_C) ? 0x01: 0x00);
+
+                 // Update flags
+                cpu->AF[1] &= ~(FLAG_Z | FLAG_N | FLAG_H); 
+                if (old_bit7) {
+                    cpu->AF[1] |= FLAG_C;  // Set carry flag if bit 7 was 1
+                } else {
+                    cpu->AF[1] &= ~FLAG_C; // Clear carry flag if bit 7 was 0
+                }
+                if (*target == 0) {
+                    cpu->AF[1] |= FLAG_Z;  // Set zero flag if result is zero
+                }
+            }
+            break; 
+        }
+    }
+
 }
 
 

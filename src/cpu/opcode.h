@@ -88,4 +88,20 @@
 #define DI 0xF3
 #define EI 0xFB
 
+// CB prefix instructions
+#define CB_EXTENDED_OPCODES 0xCB
+
+#define RLC_R8 0x00
+#define RRC_R8 0x08
+#define RC_R8 0x10
+#define RR_R8 0x18
+#define SLA_R8 0x20
+#define SRA_R8 0x28
+#define SWAP_R8 0x30
+#define SRL_R8 0x38
+
+#define BIT_B3_R8 0x40
+#define RES_B3_R8 0x80
+#define SET_B3_R8 0xC0
+
 #endif 

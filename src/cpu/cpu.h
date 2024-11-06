@@ -2,6 +2,7 @@
 #define CPU_H
 
 #include "stdint.h"
+#include "stdbool.h"
 #include <windows.h> // Multiplatform support -> unistd.h
 
 #include "opcode.h"
