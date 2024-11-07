@@ -14,7 +14,7 @@ uint8_t fetch_next_byte(CPU_registers* cpu, uint8_t* memory)
     return next_byte;
 };
 
-void decode_execute_opcode(CPU_registers* cpu, uint8_t opcode, uint8_t* memory) {
+void decode_execute_opcode(CPU_registers* cpu, uint8_t opcode, uint8_t* memory, bool special_instructions) {
     // Invalid opcodes that hard lock the CPU
     bool hard_lock = false;
     switch (opcode) {
@@ -640,106 +640,280 @@ void decode_execute_opcode(CPU_registers* cpu, uint8_t opcode, uint8_t* memory) 
             break;
     }
 
-    // Another block for opcodes with an operand in bits 0, 1, 2
-    switch (opcode & 0xF8) {
-        case RLC_R8: {
-            uint8_t operand = opcode & MASK_BIT_012;
-            uint8_t* target = NULL; // Pointer to the target register
+    // Blocks for special 0xCB instructions
+    if (special_instructions) {
+        // Another block for opcodes with an operand in bits 0, 1, 2
+        switch (opcode & 0xF8) {
+            case RLC_R8: {
+                uint8_t operand = opcode & MASK_BIT_012;
+                uint8_t* target = NULL; // Pointer to the target register
 
-            switch (operand) {
-                case 0x00: target = &cpu->BC[0]; break;
-                case 0x01: target = &cpu->BC[1]; break;
-                case 0x02: target = &cpu->DE[0]; break;
-                case 0x03: target = &cpu->DE[1]; break;
-                case 0x04: target = &cpu->HL[0]; break;
-                case 0x05: target = &cpu->HL[1]; break;
-                case 0x06: target = &memory[cpu->HL[0] | (cpu->HL[1] << 8)]; break;
-                case 0x07: target = &cpu->AF[0]; break;
-            }
-
-            if (target) {
-                uint8_t old_bit7 = (*target & 0x80) >> 7;  // Capture bit 7 before rotating
-                *target = (*target << 1) | old_bit7;        // Rotate left circular
-
-                // Update flags
-                cpu->AF[1] &= ~(FLAG_Z | FLAG_N | FLAG_H);  // Clear Z, N, and H flags
-                if (old_bit7) {
-                    cpu->AF[1] |= FLAG_C;  // Set carry flag if bit 7 was 1
-                } else {
-                    cpu->AF[1] &= ~FLAG_C; // Clear carry flag if bit 7 was 0
+                switch (operand) {
+                    case 0x00: target = &cpu->BC[0]; break;
+                    case 0x01: target = &cpu->BC[1]; break;
+                    case 0x02: target = &cpu->DE[0]; break;
+                    case 0x03: target = &cpu->DE[1]; break;
+                    case 0x04: target = &cpu->HL[0]; break;
+                    case 0x05: target = &cpu->HL[1]; break;
+                    case 0x06: target = &memory[cpu->HL[0] | (cpu->HL[1] << 8)]; break;
+                    case 0x07: target = &cpu->AF[0]; break;
                 }
-                if (*target == 0) {
-                    cpu->AF[1] |= FLAG_Z;  // Set zero flag if result is zero
+
+                if (target) {
+                    uint8_t old_bit7 = (*target & 0x80) >> 7;  // Capture bit 7 before rotating
+                    *target = (*target << 1) | old_bit7;        // Rotate left circular
+
+                    // Update flags
+                    cpu->AF[1] &= ~(FLAG_Z | FLAG_N | FLAG_H);  // Clear Z, N, and H flags
+                    if (old_bit7) {
+                        cpu->AF[1] |= FLAG_C;  // Set carry flag if bit 7 was 1
+                    } else {
+                        cpu->AF[1] &= ~FLAG_C; // Clear carry flag if bit 7 was 0
+                    }
+                    if (*target == 0) {
+                        cpu->AF[1] |= FLAG_Z;  // Set zero flag if result is zero
+                    }
                 }
+                break;
             }
-            break;
+            case RRC_R8: {
+                uint8_t operand = opcode & MASK_BIT_012;
+                uint8_t* target = NULL; // Pointer to the target register
+
+                switch (operand) {
+                    case 0x00: target = &cpu->BC[0]; break;
+                    case 0x01: target = &cpu->BC[1]; break;
+                    case 0x02: target = &cpu->DE[0]; break;
+                    case 0x03: target = &cpu->DE[1]; break;
+                    case 0x04: target = &cpu->HL[0]; break;
+                    case 0x05: target = &cpu->HL[1]; break;
+                    case 0x06: target = &memory[cpu->HL[0] | (cpu->HL[1] << 8)]; break;
+                    case 0x07: target = &cpu->AF[0]; break;
+                }
+
+                if (target) {
+                    uint8_t old_bit7 = (*target & 0x01);  
+                    *target = (*target >> 1) | (old_bit7 << 7);        // Rotate left circular
+
+                    // Update flags
+                    cpu->AF[1] &= ~(FLAG_Z | FLAG_N | FLAG_H);  // Clear Z, N, and H flags
+                    if (old_bit0) {
+                        cpu->AF[1] |= FLAG_C;  // Set carry flag if bit 0 was 1
+                    } else {
+                        cpu->AF[1] &= ~FLAG_C; // Clear carry flag if bit 0 was 0
+                    }
+                    if (*target == 0) {
+                        cpu->AF[1] |= FLAG_Z;  // Set zero flag if result is zero
+                    }
+                }
+                break;
+            }
+            case RL_R8: {
+                uint8_t operand = opcode & MASK_BIT_012;
+                uint8_t* target = NULL; // Pointer to the target register
+
+                switch (operand) {
+                    case 0x00: target = &cpu->BC[0]; break;
+                    case 0x01: target = &cpu->BC[1]; break;
+                    case 0x02: target = &cpu->DE[0]; break;
+                    case 0x03: target = &cpu->DE[1]; break;
+                    case 0x04: target = &cpu->HL[0]; break;
+                    case 0x05: target = &cpu->HL[1]; break;
+                    case 0x06: target = &memory[cpu->HL[0] | (cpu->HL[1] << 8)]; break;
+                    case 0x07: target = &cpu->AF[0]; break;
+                }
+
+                if (target) {
+                    uint8_t old_bit7 = (*target & 0x80) >> 7; 
+                    *target = (*target << 1) | ((cpu->AF[1] | FLAG_C) ? 0x01: 0x00);
+
+                    // Update flags
+                    cpu->AF[1] &= ~(FLAG_Z | FLAG_N | FLAG_H); 
+                    if (old_bit7) {
+                        cpu->AF[1] |= FLAG_C;  // Set carry flag if bit 7 was 1
+                    } else {
+                        cpu->AF[1] &= ~FLAG_C; // Clear carry flag if bit 7 was 0
+                    }
+                    if (*target == 0) {
+                        cpu->AF[1] |= FLAG_Z;  // Set zero flag if result is zero
+                    }
+                }
+                break; 
+            }
+            case RR_R8: {
+                uint8_t operand = opcode & MASK_BIT_012;
+                uint8_t* target = NULL; // Pointer to the target register
+
+                switch (operand) {
+                    case 0x00: target = &cpu->BC[0]; break;
+                    case 0x01: target = &cpu->BC[1]; break;
+                    case 0x02: target = &cpu->DE[0]; break;
+                    case 0x03: target = &cpu->DE[1]; break;
+                    case 0x04: target = &cpu->HL[0]; break;
+                    case 0x05: target = &cpu->HL[1]; break;
+                    case 0x06: target = &memory[cpu->HL[0] | (cpu->HL[1] << 8)]; break;
+                    case 0x07: target = &cpu->AF[0]; break;
+                }
+
+                if (target) {
+                    uint8_t old_carry = (cpu->AF[1] & FLAG_C) ? 0x80 : 0x00;  // Carry as MSB if set
+                    uint8_t old_bit0 = *target & 0x01; // Save LSB (bit 0)
+                    *target = (*target >> 1) | old_carry;
+
+                    // Update flags
+                    cpu->AF[1] &= ~(FLAG_Z | FLAG_N | FLAG_H); 
+                    if (old_bit0) {
+                        cpu->AF[1] |= FLAG_C;  // Set carry flag if bit 7 was 1
+                    } else {
+                        cpu->AF[1] &= ~FLAG_C; // Clear carry flag if bit 7 was 0
+                    }
+                    if (*target == 0) {
+                        cpu->AF[1] |= FLAG_Z;  // Set zero flag if result is zero
+                    }
+                }
+                break; 
+            }
+            case SLA_R8: {
+                uint8_t operand = opcode & MASK_BIT_012;
+                uint8_t* target = NULL; // Pointer to the target register
+
+                switch (operand) {
+                    case 0x00: target = &cpu->BC[0]; break;
+                    case 0x01: target = &cpu->BC[1]; break;
+                    case 0x02: target = &cpu->DE[0]; break;
+                    case 0x03: target = &cpu->DE[1]; break;
+                    case 0x04: target = &cpu->HL[0]; break;
+                    case 0x05: target = &cpu->HL[1]; break;
+                    case 0x06: target = &memory[cpu->HL[0] | (cpu->HL[1] << 8)]; break;
+                    case 0x07: target = &cpu->AF[0]; break;
+                }
+    
+                *target <<= 1;
+                break;
+            }
+            case SRL_R8: {
+                uint8_t operand = opcode & MASK_BIT_012;
+                uint8_t* target = NULL; // Pointer to the target register
+
+                switch (operand) {
+                    case 0x00: target = &cpu->BC[0]; break;
+                    case 0x01: target = &cpu->BC[1]; break;
+                    case 0x02: target = &cpu->DE[0]; break;
+                    case 0x03: target = &cpu->DE[1]; break;
+                    case 0x04: target = &cpu->HL[0]; break;
+                    case 0x05: target = &cpu->HL[1]; break;
+                    case 0x06: target = &memory[cpu->HL[0] | (cpu->HL[1] << 8)]; break;
+                    case 0x07: target = &cpu->AF[0]; break;
+                }
+    
+                *target >>= 1;
+                break;
+            }
+            case SRA_R8: {
+                uint8_t operand = opcode & MASK_BIT_012;
+                uint8_t* target = NULL; // Pointer to the target register
+
+                switch (operand) {
+                    case 0x00: target = &cpu->BC[0]; break;
+                    case 0x01: target = &cpu->BC[1]; break;
+                    case 0x02: target = &cpu->DE[0]; break;
+                    case 0x03: target = &cpu->DE[1]; break;
+                    case 0x04: target = &cpu->HL[0]; break;
+                    case 0x05: target = &cpu->HL[1]; break;
+                    case 0x06: target = &memory[cpu->HL[0] | (cpu->HL[1] << 8)]; break;
+                    case 0x07: target = &cpu->AF[0]; break;
+                }
+    
+                uint8_t msb = (*target & 0x80);
+                *target = msb | (*target >> 1);
+                break;
+            }
+            case SWAP_R8: {
+                uint8_t operand = opcode & MASK_BIT_012;
+                uint8_t* target = NULL; // Pointer to the target register
+
+                switch (operand) {
+                    case 0x00: target = &cpu->BC[0]; break;
+                    case 0x01: target = &cpu->BC[1]; break;
+                    case 0x02: target = &cpu->DE[0]; break;
+                    case 0x03: target = &cpu->DE[1]; break;
+                    case 0x04: target = &cpu->HL[0]; break;
+                    case 0x05: target = &cpu->HL[1]; break;
+                    case 0x06: target = &memory[cpu->HL[0] | (cpu->HL[1] << 8)]; break;
+                    case 0x07: target = &cpu->AF[0]; break;
+                }
+    
+                uint8_t lower_nibble = (*target & 0x0F);
+                uint8_t upper_nibble = (*target & 0xF0) >> 4;
+                *target = (lower_nibble << 4 | upper_nibble);
+                break;
+            }
         }
-        case RRC_R8: {
-            uint8_t operand = opcode & MASK_BIT_012;
-            uint8_t* target = NULL; // Pointer to the target register
 
-            switch (operand) {
-                case 0x00: target = &cpu->BC[0]; break;
-                case 0x01: target = &cpu->BC[1]; break;
-                case 0x02: target = &cpu->DE[0]; break;
-                case 0x03: target = &cpu->DE[1]; break;
-                case 0x04: target = &cpu->HL[0]; break;
-                case 0x05: target = &cpu->HL[1]; break;
-                case 0x06: target = &memory[cpu->HL[0] | (cpu->HL[1] << 8)]; break;
-                case 0x07: target = &cpu->AF[0]; break;
-            }
+        // Another block for opcodes with an operand in bits 0, 1, 2 and operand in bits 3, 4, 5
+        switch (opcode & 0xC0) {
+            case BIT_B3_R8: {
+                int8_t operand = opcode & MASK_BIT_012;
+                uint8_t bit_index = (opcode & MASK_BIT_345) >> 3; // Shift to get bit index
+                uint8_t* target = NULL; // Pointer to the target register
 
-            if (target) {
-                uint8_t old_bit7 = (*target & 0x01);  
-                *target = (*target >> 1) | (old_bit7 << 7);        // Rotate left circular
+                switch (operand) {
+                    case 0x00: target = &cpu->BC[0]; break;
+                    case 0x01: target = &cpu->BC[1]; break;
+                    case 0x02: target = &cpu->DE[0]; break;
+                    case 0x03: target = &cpu->DE[1]; break;
+                    case 0x04: target = &cpu->HL[0]; break;
+                    case 0x05: target = &cpu->HL[1]; break;
+                    case 0x06: target = &memory[cpu->HL[0] | (cpu->HL[1] << 8)]; break;
+                    case 0x07: target = &cpu->AF[0]; break;
+                }
 
-                 // Update flags
-                cpu->AF[1] &= ~(FLAG_Z | FLAG_N | FLAG_H);  // Clear Z, N, and H flags
-                if (old_bit0) {
-                    cpu->AF[1] |= FLAG_C;  // Set carry flag if bit 0 was 1
+                if ((*target & (1 << bit_index)) == 0) {
+                    cpu->AF[1] |= FLAG_Z; // Set zero flag if bit is 0
                 } else {
-                    cpu->AF[1] &= ~FLAG_C; // Clear carry flag if bit 0 was 0
+                    cpu->AF[1] &= ~FLAG_Z; // Clear zero flag if bit is 1
                 }
-                if (*target == 0) {
-                    cpu->AF[1] |= FLAG_Z;  // Set zero flag if result is zero
-                }
+                break;
             }
-            break;
+            case RST_B3_R8: {
+                int8_t operand = opcode & MASK_BIT_012;
+                uint8_t bit_index = (opcode & MASK_BIT_345) >> 3;   
+                uint8_t* target = NULL; // Pointer to the target register
+
+                switch (operand) {
+                    case 0x00: target = &cpu->BC[0]; break;
+                    case 0x01: target = &cpu->BC[1]; break;
+                    case 0x02: target = &cpu->DE[0]; break;
+                    case 0x03: target = &cpu->DE[1]; break;
+                    case 0x04: target = &cpu->HL[0]; break;
+                    case 0x05: target = &cpu->HL[1]; break;
+                    case 0x06: target = &memory[cpu->HL[0] | (cpu->HL[1] << 8)]; break;
+                    case 0x07: target = &cpu->AF[0]; break;
+                }
+
+                *target &= ~(1 << bit_index); // Clear the bit at bit_index
+                break;
+            }
+            case SET_B3_R8: {
+                int8_t operand = opcode & MASK_BIT_012;
+                uint8_t bit_index = (opcode & MASK_BIT_345) >> 3;   
+                uint8_t* target = NULL; // Pointer to the target register
+
+                switch (operand) {
+                    case 0x00: target = &cpu->BC[0]; break;
+                    case 0x01: target = &cpu->BC[1]; break;
+                    case 0x02: target = &cpu->DE[0]; break;
+                    case 0x03: target = &cpu->DE[1]; break;
+                    case 0x04: target = &cpu->HL[0]; break;
+                    case 0x05: target = &cpu->HL[1]; break;
+                    case 0x06: target = &memory[cpu->HL[0] | (cpu->HL[1] << 8)]; break;
+                    case 0x07: target = &cpu->AF[0]; break;
+                }
+
+                *target |= (1 << bit_index); // Set the bit at bit_index
+                break;
+            }
         }
-        case RL_R8: {
-            uint8_t operand = opcode & MASK_BIT_012;
-            uint8_t* target = NULL; // Pointer to the target register
-
-            switch (operand) {
-                case 0x00: target = &cpu->BC[0]; break;
-                case 0x01: target = &cpu->BC[1]; break;
-                case 0x02: target = &cpu->DE[0]; break;
-                case 0x03: target = &cpu->DE[1]; break;
-                case 0x04: target = &cpu->HL[0]; break;
-                case 0x05: target = &cpu->HL[1]; break;
-                case 0x06: target = &memory[cpu->HL[0] | (cpu->HL[1] << 8)]; break;
-                case 0x07: target = &cpu->AF[0]; break;
-            }
-
-            if (target) {
-                uint8_t old_bit7 = (*target & 0x80) >> 7; 
-                *target = (*target << 1) | ((cpu->AF[1] | FLAG_C) ? 0x01: 0x00);
-
-                 // Update flags
-                cpu->AF[1] &= ~(FLAG_Z | FLAG_N | FLAG_H); 
-                if (old_bit7) {
-                    cpu->AF[1] |= FLAG_C;  // Set carry flag if bit 7 was 1
-                } else {
-                    cpu->AF[1] &= ~FLAG_C; // Clear carry flag if bit 7 was 0
-                }
-                if (*target == 0) {
-                    cpu->AF[1] |= FLAG_Z;  // Set zero flag if result is zero
-                }
-            }
-            break; 
-        }
-    }
-
 }
 
 
